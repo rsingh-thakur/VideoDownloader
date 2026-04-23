@@ -234,6 +234,16 @@
             </div>
         </div>
 
+        <div style="margin-bottom: 20px; text-align: left;">
+            <a href="#" onclick="document.getElementById('cookie-section').style.display='block';this.style.display='none';return false;" 
+               style="color: var(--text-dim); font-size: 0.7rem; text-decoration: none;">+ Add Cookies (to bypass bot detection)</a>
+            <div id="cookie-section" style="display: none;">
+                <label style="font-size: 0.7rem; color: var(--text-dim); display: block; margin-bottom: 5px;">PASTE COOKIES (Netscape format)</label>
+                <textarea id="cookies" placeholder="# Netscape HTTP Cookie File..." 
+                          style="width: 100%; height: 80px; background: rgba(0,0,0,0.2); border: 1px solid var(--glass-border); border-radius: 8px; color: #888; font-size: 0.7rem; padding: 10px; outline: none;"></textarea>
+            </div>
+        </div>
+
         <button id="download-btn" onclick="fetchInfo()">Start Download</button>
 
         <div id="preview-card">
@@ -277,6 +287,14 @@
             playerContainer.style.display = 'none';
 
             try {
+                // Save cookies first
+                const cookies = document.getElementById('cookies').value;
+                await fetch('/prepare', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ cookies: cookies })
+                });
+
                 const response = await fetch(`/info?url=${encodeURIComponent(url)}`);
                 const data = await response.json();
 

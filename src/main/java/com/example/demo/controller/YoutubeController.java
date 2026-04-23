@@ -20,12 +20,28 @@ public class YoutubeController {
 
     private final ExecutorService executor = Executors.newCachedThreadPool();
 
+    @PostMapping("/prepare")
+    @ResponseBody
+    public String prepareDownload(@RequestBody java.util.Map<String, String> data) {
+        String cookies = data.get("cookies");
+        if (cookies != null && !cookies.trim().isEmpty()) {
+            try {
+                java.nio.file.Files.write(Paths.get("cookies.txt"), cookies.getBytes());
+                return "ok";
+            } catch (Exception e) {
+                return "error: " + e.getMessage();
+            }
+        }
+        new File("cookies.txt").delete();
+        return "none";
+    }
+
     @GetMapping("/info")
     @ResponseBody
     public java.util.Map<String, String> getInfo(@RequestParam String url) {
         try {
             String ytDlpPath = System.getenv().getOrDefault("YT_DLP_PATH", "yt-dlp");
-            ProcessBuilder builder = new ProcessBuilder(
+            java.util.List<String> cmd = new java.util.ArrayList<>(java.util.Arrays.asList(
                     ytDlpPath,
                     "--get-title",
                     "--get-thumbnail",
@@ -33,8 +49,16 @@ public class YoutubeController {
                     "-g",
                     "--no-playlist",
                     "--extractor-args", "youtube:player-client=web_creator",
-                    "--user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-                    url);
+                    "--user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            ));
+            
+            if (new File("cookies.txt").exists()) {
+                cmd.add("--cookies");
+                cmd.add("cookies.txt");
+            }
+            cmd.add(url);
+
+            ProcessBuilder builder = new ProcessBuilder(cmd);
             Process process = builder.start();
             BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
             String title = reader.readLine();
@@ -74,11 +98,7 @@ public class YoutubeController {
                 boolean downloadAudio = type.equals("audio") || type.equals("both");
 
                 String lastFile = "";
-
-                if (downloadVideo) {
-                    lastFile = runYtDlp(url, quality, "video", playlist, emitter);
-                }
-
+                if (downloadVideo) lastFile = runYtDlp(url, quality, "video", playlist, emitter);
                 if (downloadAudio) {
                     String audioFile = runYtDlp(url, quality, "audio", playlist, emitter);
                     if (!downloadVideo) lastFile = audioFile;
@@ -89,8 +109,8 @@ public class YoutubeController {
             } catch (Exception e) {
                 try {
                     emitter.send(SseEmitter.event().name("error").data(e.getMessage()));
+                    emitter.complete();
                 } catch (Exception ignored) {}
-                emitter.completeWithError(e);
             }
         });
         return emitter;
@@ -108,17 +128,19 @@ public class YoutubeController {
             command.add("-x");
             command.add("--audio-format"); command.add("mp3");
         } else {
-            String format = "bv[height<=" + quality + "][ext=mp4]+ba[ext=m4a]/b[ext=mp4]/b";
-            command.add("-f"); command.add(format);
+            command.add("-f"); command.add("bv[height<=" + quality + "][ext=mp4]+ba[ext=m4a]/b[ext=mp4]/b");
             command.add("--merge-output-format"); command.add("mp4");
         }
 
-        if (!allowPlaylist) {
-            command.add("--no-playlist");
-        }
+        if (!allowPlaylist) command.add("--no-playlist");
 
         command.add("--extractor-args"); command.add("youtube:player-client=web_creator");
         command.add("--user-agent"); command.add("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
+        
+        if (new File("cookies.txt").exists()) {
+            command.add("--cookies");
+            command.add("cookies.txt");
+        }
 
         command.add("--restrict-filenames");
         command.add("--ffmpeg-location"); command.add(ffmpegPath);
@@ -139,33 +161,22 @@ public class YoutubeController {
         String currentTitle = "Video";
 
         while ((line = reader.readLine()) != null) {
-            System.out.println(line);
-            
             Matcher titleMatcher = titlePattern.matcher(line);
-            if (titleMatcher.find()) {
-                currentTitle = titleMatcher.group(1);
-            }
+            if (titleMatcher.find()) currentTitle = titleMatcher.group(1);
 
             Matcher percentMatcher = percentPattern.matcher(line);
             if (percentMatcher.find()) {
-                String percent = percentMatcher.group(1);
-                String json = String.format("{\"percent\": %s, \"title\": \"%s\"}", 
-                                             percent, currentTitle.replace("\"", "\\\""));
+                String json = String.format("{\"percent\": %s, \"title\": \"%s\"}", percentMatcher.group(1), currentTitle.replace("\"", "\\\""));
                 emitter.send(SseEmitter.event().name("progress").data(json));
             }
             
-            if (line.contains("[download] Destination:")) {
-                lastFile = line.substring(line.lastIndexOf("downloads")).trim();
-            } else if (line.contains("Merging formats into")) {
-                lastFile = line.substring(line.lastIndexOf("downloads")).trim();
-            } else if (line.contains("[ExtractAudio] Destination:")) {
-                lastFile = line.substring(line.lastIndexOf("downloads")).trim();
-            }
+            if (line.contains("[download] Destination:")) lastFile = line.substring(line.lastIndexOf("downloads")).trim();
+            else if (line.contains("Merging formats into")) lastFile = line.substring(line.lastIndexOf("downloads")).trim();
+            else if (line.contains("[ExtractAudio] Destination:")) lastFile = line.substring(line.lastIndexOf("downloads")).trim();
         }
 
         int exitCode = process.waitFor();
         if (exitCode != 0) throw new RuntimeException("yt-dlp failed with code " + exitCode);
-
         return lastFile.replace("downloads/", "").replace("downloads\\", "");
     }
 }
