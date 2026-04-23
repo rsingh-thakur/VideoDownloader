@@ -1,16 +1,15 @@
-FROM maven:3.8.4-openjdk-17 AS build
+FROM maven:3.8.4-eclipse-temurin-17 AS build
 COPY . /app
 WORKDIR /app
 RUN mvn clean package -DskipTests
 
-FROM openjdk:17-jdk-slim
+FROM eclipse-temurin:17-jdk
 WORKDIR /app
 COPY --from=build /app/target/*.jar app.jar
 
 # Install yt-dlp and ffmpeg
 RUN apt-get update && apt-get install -y \
     python3 \
-    python3-pip \
     ffmpeg \
     curl \
     && curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o /usr/local/bin/yt-dlp \
