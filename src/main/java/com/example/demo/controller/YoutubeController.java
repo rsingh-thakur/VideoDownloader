@@ -32,6 +32,8 @@ public class YoutubeController {
                     "-f", "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best",
                     "-g",
                     "--no-playlist",
+                    "--extractor-args", "youtube:player-client=web_creator",
+                    "--user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
                     url);
             Process process = builder.start();
             BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
@@ -114,6 +116,9 @@ public class YoutubeController {
         if (!allowPlaylist) {
             command.add("--no-playlist");
         }
+
+        command.add("--extractor-args"); command.add("youtube:player-client=web_creator");
+        command.add("--user-agent"); command.add("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
 
         command.add("--restrict-filenames");
         command.add("--ffmpeg-location"); command.add(ffmpegPath);

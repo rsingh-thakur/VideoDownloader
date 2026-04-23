@@ -7,11 +7,12 @@ FROM eclipse-temurin:17-jdk
 WORKDIR /app
 COPY --from=build /app/target/*.jar app.jar
 
-# Install yt-dlp and ffmpeg
+# Install yt-dlp, ffmpeg and Node.js (for JS runtime)
 RUN apt-get update && apt-get install -y \
     python3 \
     ffmpeg \
     curl \
+    nodejs \
     && curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o /usr/local/bin/yt-dlp \
     && chmod a+rx /usr/local/bin/yt-dlp
 
